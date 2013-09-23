@@ -1,4 +1,4 @@
-(defproject devn/pagerduty "0.1.0"
+(defproject devn/pagerduty "0.1.1"
   :description "PagerDuty - API Client"
   :url "https://github.com/devn/pagerduty-clj"
   :license {:name "Eclipse Public License"
