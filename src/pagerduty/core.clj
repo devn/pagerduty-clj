@@ -1,4 +1,6 @@
 (ns pagerduty.core
+  "Core support for PagerDuty's v1 API. Most of this was stolen
+   liberally from Raynes' tentacles (https://github.com/Raynes/tentacles) lib."
   (:require [clj-http.client :as http]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -6,14 +8,19 @@
             [alandipert.interpol8 :refer (i interpolating)])
   (:import java.net.URLEncoder))
 
-(def ^:dynamic url "https://webdemo.pagerduty.com/api/v1/")
-(def ^:dynamic defaults {})
+(def ^:dynamic *subdomain* "YOURSUBDOMAIN")
+
+(defn pagerduty-url [subdomain]
+  (str "https://" *subdomain* ".pagerduty.com/api/v1/"))
+
+(def ^:dynamic *url* (pagerduty-url *subdomain*))
+(def ^:dynamic *defaults* {})
 
 (defn query-map
   "Merge defaults, turn keywords into strings, and replace hyphens with underscores."
   [entries]
   (into {}
-        (for [[k v] (concat defaults entries)]
+        (for [[k v] (concat *defaults* entries)]
           [(.replace (name k) "-" "_") v])))
 
 (defn parse-json
@@ -71,7 +78,7 @@
 (defn update-req
   "Given a clj-http request, and a 'next' url string, merge the next url into the request"
   [req url]
-  (let [url-map (url/url url)]
+  (let [url-map (url/url *url*)]
     (assoc-in req [:query-params] (-> url-map :query))))
 
 (defn no-content?
@@ -82,16 +89,16 @@
   "Creates a URL out of end-point and positional. Called URLEncoder/encode on
    the elements of positional and then formats them in."
   [end-point positional]
-  (str url (apply format end-point (map #(URLEncoder/encode (str %) "UTF-8") positional))))
+  (str *url*
+       (apply format end-point (map #(URLEncoder/encode (str %) "UTF-8") positional))))
 
-(defn make-request [method end-point positional
-                    {:strs [auth throw_exceptions follow_redirects
-                            accept token etag if_modified_since
-                            content_type]
-                     :or {follow_redirects true
-                          throw_exceptions false
-                          content_type "application/json"}
-                     :as query}]
+(defn make-request [method end-point positional {:strs [auth throw_exceptions follow_redirects
+                                                        accept token etag if_modified_since
+                                                        content_type]
+                                                 :or {follow_redirects true
+                                                      throw_exceptions false
+                                                      content_type "application/json"}
+                                                 :as query}]
   (let [req (merge-with merge
                         {:url (format-url end-point positional)
                          :basic-auth auth
@@ -111,7 +118,6 @@
         req (if (#{:post :put :delete} method)
               (assoc req :body (json/generate-string (or (proper-query "raw") proper-query)))
               (assoc req :query-params proper-query))]
-    (println req)
     req))
 
 (defn api-call
@@ -144,10 +150,21 @@
   ([] (api-call :get "rate_limit"))
   ([opts] (api-call :get "rate_limit" nil opts)))
 
-(defmacro with-url [new-url & body]
-  `(binding [url ~new-url]
-     ~@body))
+;; (defmacro with-url [new-url & body]
+;;   `(binding [*url* ~new-url]
+;;      ~@body))
 
-(defmacro with-defaults [options & body]
-  `(binding [defaults ~options]
-     ~@body))
+;; (defmacro with-defaults [options & body]
+;;   `(binding [*defaults* ~options]
+;;      ~@body))
+
+(defn set-url! [new-url]
+  (alter-var-root (var *url*) (constantly new-url)))
+
+(defn set-subdomain! [subdomain]
+  "Sets the *subdomain* var to `subdomain`."
+  (alter-var-root (var *subdomain*) (constantly subdomain))
+  (alter-var-root (var *url*) (constantly (pagerduty-url *subdomain*))))
+
+(defn set-token! [token]
+  (alter-var-root (var *defaults*) (constantly (assoc *defaults* :token token))))
